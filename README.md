@@ -101,6 +101,48 @@ Na primeira vez, será solicitado criar o usuário administrador.
 
 ---
 
+## 🧠 Recursos e Limitações (t3.medium)
+
+A configuração foi otimizada para rodar em uma instância **AWS t3.medium (2 vCPUs / 4GB RAM)**.
+
+### Docker Compose (`docker-compose.yml`)
+
+| Diretiva | Valor | Descrição |
+|---|---|---|
+| `mem_limit` | `2g` | Teto máximo de RAM — se ultrapassar, o container é reiniciado |
+| `mem_reservation` | `512m` | RAM garantida ao container mesmo sob pressão do host |
+| `cpus` | `1.5` | Máximo de vCPUs — garante margem para SO, PostgreSQL e Traefik |
+
+### Dockerfile
+```dockerfile
+ENV NODE_OPTIONS="--max-old-space-size=1536"
+```
+
+Limita o **heap do Node.js** a 1536MB em dois momentos:
+- **Build** — evita que o compilador TypeScript + webpack trave a instância
+- **Runtime** — evita crescimento descontrolado de memória em produção
+
+### Por que dois limites de memória?
+
+| Limite | Onde age | O que controla |
+|---|---|---|
+| `--max-old-space-size=1536` | Dentro do Node.js | Heap do JavaScript |
+| `mem_limit: 2g` | Docker/Linux | Todo o processo (Node + vips + libs nativas) |
+
+O `vips` (processamento de imagens) aloca memória **fora** do heap do Node, por isso o `mem_limit` é maior que o `--max-old-space-size`.
+
+### Distribuição estimada de memória
+
+| Serviço | Uso estimado |
+|---|---|
+| Sistema operacional | ~400MB |
+| Traefik | ~50MB |
+| PostgreSQL | ~200MB |
+| Strapi | até 2GB |
+| Margem de segurança | ~350MB |
+
+---
+
 ## 🔄 Atualização
 
 ```bash
