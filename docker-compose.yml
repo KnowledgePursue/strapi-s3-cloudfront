@@ -35,7 +35,6 @@ services:
     cpus: '1.5'
     environment:
       CDN_URL: ${CDN_URL}
-      CDN_HOST: ${CDN_HOST}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_ACCESS_SECRET: ${AWS_ACCESS_SECRET}
       AWS_REGION: ${AWS_REGION}
