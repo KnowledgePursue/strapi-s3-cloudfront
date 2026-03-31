@@ -57,10 +57,21 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=strapi"
+
+      # Router HTTPS (principal)
       - "traefik.http.routers.strapi.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.strapi.entrypoints=websecure,web"
+      - "traefik.http.routers.strapi.entrypoints=websecure"
       - "traefik.http.routers.strapi.tls.certresolver=le"
       - "traefik.http.services.strapi.loadbalancer.server.port=1337"
+
+      # Router HTTP (só para redirecionar para HTTPS)
+      - "traefik.http.routers.strapi-http.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.strapi-http.entrypoints=web"
+      - "traefik.http.routers.strapi-http.middlewares=redirect-to-https"
+
+      # Middleware de redirect
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
     networks:
       - strapi
     depends_on:
