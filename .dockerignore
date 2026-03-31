@@ -1,0 +1,11 @@
+node_modules
+.cache
+build
+dist
+.git
+.github
+*.log
+.env
+.env.*
+!.env.example
+public/uploads

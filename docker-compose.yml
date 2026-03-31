@@ -1,0 +1,93 @@
+version: "3"
+services:
+  traefik:
+    image: traefik:v3.6
+    command:
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.le.acme.email=${EMAIL_SSL}"
+      - "--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.le.acme.httpchallenge=true"
+      - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/acme.json:/letsencrypt/acme.json
+    restart: always
+    networks:
+      - strapi
+
+  strapi:
+    container_name: strapi
+    build:
+      context: .
+      args:
+        EXTRA_DEPS: "@strapi/provider-upload-aws-s3@5.40.0"
+    restart: unless-stopped
+    env_file: .env
+    mem_limit: 2g
+    mem_reservation: 512m
+    cpus: '1.5'
+    environment:
+      CDN_URL: ${CDN_URL}
+      CDN_HOST: ${CDN_HOST}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_ACCESS_SECRET: ${AWS_ACCESS_SECRET}
+      AWS_REGION: ${AWS_REGION}
+      AWS_BUCKET: ${AWS_BUCKET}
+      DATABASE_CLIENT: ${DATABASE_CLIENT}
+      DATABASE_HOST: strapiDB
+      DATABASE_PORT: ${DATABASE_PORT}
+      DATABASE_NAME: ${DATABASE_NAME}
+      DATABASE_USERNAME: ${DATABASE_USERNAME}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET}
+      APP_KEYS: ${APP_KEYS}
+      NODE_ENV: ${NODE_ENV}
+    volumes:
+      - ./.env:/opt/app/.env
+      - ./public/uploads:/opt/app/public/uploads
+    ports:
+      - "1337:1337"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=strapi"
+      - "traefik.http.routers.strapi.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.strapi.entrypoints=websecure,web"
+      - "traefik.http.routers.strapi.tls.certresolver=le"
+      - "traefik.http.services.strapi.loadbalancer.server.port=1337"
+    networks:
+      - strapi
+    depends_on:
+      - strapiDB
+
+  strapiDB:
+    container_name: strapiDB
+    platform: linux/amd64
+    restart: unless-stopped
+    env_file: .env
+    image: postgres:16.0-alpine
+    environment:
+      POSTGRES_USER: ${DATABASE_USERNAME}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+    volumes:
+      - strapi-data:/var/lib/postgresql/data/
+    ports:
+      - "5432:5432"
+    networks:
+      - strapi
+
+volumes:
+  strapi-data:
+
+networks:
+  strapi:
+    name: strapi
+    driver: bridge
