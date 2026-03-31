@@ -1,61 +1,183 @@
-# 🚀 Getting started with Strapi
+# 🚀 Strapi 5 + S3 + CloudFront + Docker
 
-Strapi comes with a full featured [Command Line Interface](https://docs.strapi.io/dev-docs/cli) (CLI) which lets you scaffold and manage your project in seconds.
+Stack de produção para o Strapi CMS com armazenamento de mídia no **AWS S3 privado**, distribuição via **CloudFront CDN** e proxy reverso com **Traefik + SSL automático**.
 
-### `develop`
-
-Start your Strapi application with autoReload enabled. [Learn more](https://docs.strapi.io/dev-docs/cli#strapi-develop)
+## 🏗️ Arquitetura
 
 ```
-npm run develop
-# or
-yarn develop
+Usuário → CloudFront (CDN) → S3 (privado)
+                ↑
+Strapi → faz upload direto no S3
+         e salva URL do CloudFront no banco
 ```
 
-### `start`
+## 📋 Pré-requisitos
 
-Start your Strapi application with autoReload disabled. [Learn more](https://docs.strapi.io/dev-docs/cli#strapi-start)
+- Docker e Docker Compose instalados no servidor
+- Domínio apontando para o IP do servidor (necessário para SSL)
+- Conta AWS com:
+  - Bucket S3 criado (privado, ACLs desabilitadas)
+  - Distribuição CloudFront com OAC apontando para o bucket
+  - IAM Access Key com permissões de leitura/escrita no bucket
+  - Bucket policy permitindo acesso do CloudFront via OAC
+
+## ⚙️ Permissões IAM necessárias
+
+```json
+{
+  "Effect": "Allow",
+  "Action": [
+    "s3:PutObject",
+    "s3:GetObject",
+    "s3:DeleteObject",
+    "s3:ListBucket"
+  ],
+  "Resource": [
+    "arn:aws:s3:::SEU-BUCKET",
+    "arn:aws:s3:::SEU-BUCKET/*"
+  ]
+}
+```
+
+## 🚀 Instalação
+
+### 1. Clone o repositório
+
+```bash
+git clone https://github.com/KnowledgePursue/strapi-s3-cloudfront.git
+cd strapi-s3-cloudfront
+```
+
+### 2. Configure as variáveis de ambiente
+
+```bash
+cp .env.example .env
+vim .env
+```
+
+Preencha todos os valores. Para gerar os secrets:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(16).toString('base64'))"
+```
+
+Execute o comando acima uma vez para cada secret (`APP_KEYS` precisa de 4 valores separados por vírgula).
+
+### 3. Crie a estrutura de pastas necessária
+
+```bash
+mkdir -p traefik public/uploads
+touch traefik/acme.json
+chmod 600 traefik/acme.json
+```
+
+> ⚠️ O `chmod 600` no `acme.json` é obrigatório — o Traefik recusa iniciar sem ele.
+
+### 4. Build e inicialização
+
+```bash
+docker compose build --no-cache
+docker compose up -d
+```
+
+### 5. Verifique os logs
+
+```bash
+docker compose logs -f strapi
+```
+
+Aguarde a mensagem:
+```
+info: Strapi started successfully
+```
+
+### 6. Acesse o painel admin
 
 ```
-npm run start
-# or
-yarn start
+https://seu.dominio.com.br/admin
 ```
 
-### `build`
-
-Build your admin panel. [Learn more](https://docs.strapi.io/dev-docs/cli#strapi-build)
-
-```
-npm run build
-# or
-yarn build
-```
-
-## ⚙️ Deployment
-
-Strapi gives you many possible deployment options for your project including [Strapi Cloud](https://cloud.strapi.io). Browse the [deployment section of the documentation](https://docs.strapi.io/dev-docs/deployment) to find the best solution for your use case.
-
-```
-yarn strapi deploy
-```
-
-## 📚 Learn more
-
-- [Resource center](https://strapi.io/resource-center) - Strapi resource center.
-- [Strapi documentation](https://docs.strapi.io) - Official Strapi documentation.
-- [Strapi tutorials](https://strapi.io/tutorials) - List of tutorials made by the core team and the community.
-- [Strapi blog](https://strapi.io/blog) - Official Strapi blog containing articles made by the Strapi team and the community.
-- [Changelog](https://strapi.io/changelog) - Find out about the Strapi product updates, new features and general improvements.
-
-Feel free to check out the [Strapi GitHub repository](https://github.com/strapi/strapi). Your feedback and contributions are welcome!
-
-## ✨ Community
-
-- [Discord](https://discord.strapi.io) - Come chat with the Strapi community including the core team.
-- [Forum](https://forum.strapi.io/) - Place to discuss, ask questions and find answers, show your Strapi project and get feedback or just talk with other Community members.
-- [Awesome Strapi](https://github.com/strapi/awesome-strapi) - A curated list of awesome things related to Strapi.
+Na primeira vez, será solicitado criar o usuário administrador.
 
 ---
 
-<sub>🤫 Psst! [Strapi is hiring](https://strapi.io/careers).</sub>
+## 🔄 Atualização
+
+```bash
+docker compose down
+docker compose build --no-cache
+docker compose up -d
+```
+
+## 📁 Estrutura do projeto
+
+```
+.
+├── config/
+│   ├── plugins.ts        # Configuração do provider S3
+│   └── middlewares.ts    # CSP com domínio CloudFront via env
+├── src/                  # Código fonte do Strapi
+├── public/uploads/       # Uploads locais (ignorado pelo git)
+├── traefik/
+│   └── acme.json         # Certificados SSL (ignorado pelo git)
+├── Dockerfile            # Multi-stage build otimizado
+├── docker-compose.yml    # Strapi + PostgreSQL + Traefik
+├── .env.example          # Template de variáveis de ambiente
+└── .dockerignore
+```
+
+## 🌍 Variáveis de ambiente
+
+| Variável | Descrição | Exemplo |
+|---|---|---|
+| `HOST` | Host do servidor | `0.0.0.0` |
+| `PORT` | Porta do Strapi | `1337` |
+| `NODE_ENV` | Ambiente | `production` |
+| `APP_KEYS` | Chaves da aplicação (4 valores) | `chave1,chave2,chave3,chave4` |
+| `API_TOKEN_SALT` | Salt para tokens de API | gerado |
+| `JWT_SECRET` | Secret JWT | gerado |
+| `ADMIN_JWT_SECRET` | Secret JWT do admin | gerado |
+| `TRANSFER_TOKEN_SALT` | Salt para tokens de transferência | gerado |
+| `ENCRYPTION_KEY` | Chave de criptografia | gerado |
+| `DATABASE_CLIENT` | Tipo de banco | `postgres` |
+| `DATABASE_HOST` | Host do banco | `strapiDB` |
+| `DATABASE_PORT` | Porta do banco | `5432` |
+| `DATABASE_NAME` | Nome do banco | `strapi` |
+| `DATABASE_USERNAME` | Usuário do banco | `strapi` |
+| `DATABASE_PASSWORD` | Senha do banco | senha forte |
+| `DATABASE_SSL` | SSL no banco | `false` |
+| `DOMAIN` | Domínio do Strapi | `strapi.seu-dominio.com` |
+| `EMAIL_SSL` | Email para certificado SSL | `seu@email.com` |
+| `AWS_ACCESS_KEY_ID` | Access Key da AWS | `AKIA...` |
+| `AWS_ACCESS_SECRET` | Secret Key da AWS | `...` |
+| `AWS_REGION` | Região do bucket S3 | `us-east-1` |
+| `AWS_BUCKET` | Nome do bucket S3 | `meu-bucket` |
+| `CDN_URL` | URL completa do CloudFront | `https://xxxx.cloudfront.net` |
+
+## 🔒 Segurança
+
+- Bucket S3 **100% privado** — sem acesso público direto
+- CloudFront acessa o S3 via **OAC (Origin Access Control)**
+- Acesso direto ao S3 retorna `403 Access Denied`
+- SSL automático via **Let's Encrypt** (Traefik)
+- Secrets nunca commitados — gerenciados via `.env` (no `.gitignore`)
+
+## 🐳 Serviços Docker
+
+| Serviço | Imagem | Descrição |
+|---|---|---|
+| `strapi` | build local | CMS Strapi 5 |
+| `strapiDB` | postgres:16-alpine | Banco de dados |
+| `traefik` | traefik:v3.6 | Proxy reverso + SSL |
+
+## 📦 Adicionando dependências extras no build
+
+O `Dockerfile` suporta instalação de pacotes extras via `EXTRA_DEPS` no `docker-compose.yml`:
+
+```yaml
+build:
+  args:
+    EXTRA_DEPS: "@strapi/provider-upload-aws-s3@5.40.0 outro-pacote"
+```
+
+Isso evita a necessidade de instalar manualmente no sistema de arquivos do host.
