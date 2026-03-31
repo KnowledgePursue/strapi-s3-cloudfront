@@ -132,3 +132,5 @@ build
 traefik/acme.json
 public/uploads
 .env
+
+.gitignore
